@@ -1,7 +1,11 @@
 # compiled output
-/dist
-/node_modules
+/api/dist
+/api/node_modules
+/ui/node_modules
 /build
+/ui/dist
+/ui/.vscode/*
+/ui/.angular/*
 
 # Logs
 logs
