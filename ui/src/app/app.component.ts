@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription, takeUntil } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AppMessage, GeminiRealtimeAudioService } from './gemini-realtime-audio.service';
@@ -18,14 +18,16 @@ interface ConversationMessage {
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit, OnDestroy {
-  connectionStatus = 'disconnected';
+connectionStatus = 'disconnected';
   isRecording = false;
   isPlaying = false;
   conversationHistory: ConversationMessage[] = [];
   audioError: string | null = null;
 
   summary = signal<{ extracted_data: string }>({ extracted_data: '' });
-  private subscriptions: Subscription[] = [];
+  
+  // A Subject to trigger unsubscription on component destruction
+  private destroy$ = new Subject<void>();
 
   constructor(
     private realtimeService: GeminiRealtimeAudioService,
@@ -38,7 +40,11 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.forEach(sub => sub.unsubscribe());
+    // Signal all subscriptions to complete
+    this.destroy$.next();
+    this.destroy$.complete();
+
+    // Perform cleanup
     this.audioService.cleanup();
     this.realtimeService.disconnect();
   }
@@ -54,34 +60,34 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private setupServiceSubscriptions(): void {
-    // Subscribe to connection status
-    this.subscriptions.push(
-      this.realtimeService.getConnectionStatus().subscribe(status => {
+    // Use takeUntil to automatically unsubscribe when the component is destroyed
+    this.realtimeService.getConnectionStatus()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(status => {
         this.connectionStatus = status;
         if (status === 'error') {
           this.isRecording = false;
         }
-      })
-    );
+      });
 
-    // Subscribe to messages from the realtime service
-    this.subscriptions.push(
-      this.realtimeService.getMessages().subscribe(message => {
+    this.realtimeService.getMessages()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(message => {
         if (message) {
           this.handleAppMessage(message);
         }
-      })
-    );
+      });
 
-    // Subscribe to audio service state for playback status
-    this.subscriptions.push(
-      this.audioService.audioState$.subscribe(audioState => {
+    this.audioService.audioState$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(audioState => {
+        // Keep component's isRecording in sync with the service state
+        this.isRecording = audioState.isRecording;
         this.isPlaying = audioState.isPlaying;
         if (audioState.error) {
           this.audioError = audioState.error;
         }
-      })
-    );
+      });
   }
 
   // --- UI ACTIONS ---
@@ -101,27 +107,26 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     try {
-      this.isRecording = true;
       this.audioError = null;
       this.addMessage('user', '...(Listening)', new Date());
-      
+
+      // The service now handles all the complex audio logic.
+      // The component just passes the callback.
       await this.audioService.startRecording((audioChunk) => {
-        // Send audio chunks to the server as they become available
         this.realtimeService.sendAudioChunk(audioChunk);
       });
     } catch (error) {
       console.error('Failed to start recording:', error);
       this.addMessage('system', `Error starting recording: ${error}`, new Date());
-      this.isRecording = false;
       this.audioError = 'Failed to start recording. Please check microphone permissions.';
     }
   }
 
   stopRecording(): void {
     this.audioService.stopRecording();
-    this.isRecording = false;
     
-    // Find the '...(Listening)' message and update it
+    // The isRecording flag is now managed by the audioState$ subscription,
+    // so we don't need to set it manually here.
     const listeningMessage = this.conversationHistory.find(m => m.content === '...(Listening)');
     if (listeningMessage) {
       listeningMessage.content = '...(Processing)';
@@ -129,15 +134,13 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   endSession(): void {
-    // Stop any ongoing recording
     if (this.isRecording) {
       this.stopRecording();
     }
-    
     this.realtimeService.endSession();
-    // this.dialogRef.close(this.summary());
     console.log(`Session ended, Summary`);
   }
+  
   
   closeChat(): void {
     window.location.reload();

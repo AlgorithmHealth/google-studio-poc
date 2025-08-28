@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "es2020",
+    "lib": ["es2020"],
+    "outDir": "./src/assets/js",
+    "types": ["audioworklet"],
+    "skipLibCheck": true
+  },
+  "include": [
+    "./src/app/pcm-recorder.worklet.ts"
+  ]
+}

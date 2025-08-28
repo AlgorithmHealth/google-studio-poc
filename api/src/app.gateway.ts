@@ -107,11 +107,10 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const geminiSession = this.connections.get(client.id);
         if (geminiSession) {
             geminiSession.sendClientContent({
-                turns: [
+                turns: 
                     {
                         inlineData: audioData,
-                    },
-                ],
+                    }
             });
         } else {
             this.logger.warn(`Client ${client.id} tried to send audio without a session.`);
