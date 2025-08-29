@@ -36,6 +36,9 @@ export class GeminiAiService {
     responseModalities: [
         Modality.AUDIO,
     ],
+    inputModalities: [
+      Modality.AUDIO
+    ],
     mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
     speechConfig: {
       languageCode: 'en-US',
